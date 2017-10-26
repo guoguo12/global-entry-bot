@@ -1,13 +1,18 @@
 import argparse
 from datetime import datetime, timedelta
+import logging
 
 import requests
 import twitter
 
 from secrets import twitter_credentials
 
+LOGGING_FORMAT = '%(asctime)s %(name)-12s %(levelname)-8s %(message)s'
+
+# LAX is good for testing
 LOCATIONS = [
-    ('SFO', 5446)
+    ('SFO', 5446),
+    # ('LAX', 5180)
 ]
 
 DELTA = 4  # Weeks
@@ -33,20 +38,32 @@ def check_for_openings(location_name, location_code, test_mode=True):
 
     for result in results:
         if result['active'] > 0:
+            logging.info('Opening found for {}'.format(location_name))
+
             timestamp = datetime.strptime(result['timestamp'], TTP_TIME_FORMAT)
             message = NOTIF_MESSAGE.format(location=location_name,
                                            date=timestamp.strftime(MESSAGE_TIME_FORMAT))
             if test_mode:
                 print(message)
             else:
+                logging.info('Tweeting: ' + message)
                 tweet(message)
             return  # Halt on first match
 
+    logging.info('No openings for {}'.format(location_name))
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--test', action='store_true', default=False)
+    parser.add_argument('--test', '-t', action='store_true', default=False)
+    parser.add_argument('--verbose', '-v', action='store_true', default=False)
     args = parser.parse_args()
 
+    if args.verbose:
+        logging.basicConfig(format=LOGGING_FORMAT,
+                            level=logging.DEBUG)
+
+    logging.info('Starting checks (locations: {})'.format(len(LOCATIONS)))
     for location_name, location_code in LOCATIONS:
         check_for_openings(location_name, location_code, args.test)
 
