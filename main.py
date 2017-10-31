@@ -1,6 +1,7 @@
 import argparse
 from datetime import datetime, timedelta
 import logging
+import sys
 
 import requests
 import twitter
@@ -61,7 +62,8 @@ def main():
 
     if args.verbose:
         logging.basicConfig(format=LOGGING_FORMAT,
-                            level=logging.DEBUG)
+                            level=logging.DEBUG,
+                            stream=sys.stdout)
 
     logging.info('Starting checks (locations: {})'.format(len(LOCATIONS)))
     for location_name, location_code in LOCATIONS:
