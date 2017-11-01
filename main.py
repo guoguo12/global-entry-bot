@@ -68,7 +68,7 @@ def main():
 
     if args.verbose:
         logging.basicConfig(format=LOGGING_FORMAT,
-                            level=logging.DEBUG,
+                            level=logging.INFO,
                             stream=sys.stdout)
 
     logging.info('Starting checks (locations: {})'.format(len(LOCATIONS)))
