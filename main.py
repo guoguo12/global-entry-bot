@@ -41,7 +41,11 @@ def check_for_openings(location_name, location_code, test_mode=True):
     url = SCHEDULER_API_URL.format(location=location_code,
                                    start=start.strftime(TTP_TIME_FORMAT),
                                    end=end.strftime(TTP_TIME_FORMAT))
-    results = requests.get(url).json()  # List of flat appointment objects
+    try:
+        results = requests.get(url).json()  # List of flat appointment objects
+    except requests.ConnectionError:
+        logging.exception('Could not connect to scheduler API')
+        sys.exit(1)
 
     for result in results:
         if result['active'] > 0:
