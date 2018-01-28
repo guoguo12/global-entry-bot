@@ -10,13 +10,16 @@ from secrets import twitter_credentials
 
 LOGGING_FORMAT = '%(asctime)s %(name)-12s %(levelname)-8s %(message)s'
 
-# LAX is good for testing
+# Format: (location name, location code, number of weeks ahead to check)
+# Location codes from https://ttp.cbp.dhs.gov/schedulerapi/locations/
 LOCATIONS = [
-    ('SFO', 5446),
-    # ('LAX', 5180)
+    ('MEM', 13621, 3),
+    ('LAX', 5180, 3),
+    ('SEA', 5420, 3),
+    ('MLI', 11000, 3),
+    ('BWI', 7940, 2),
+    ('PHX', 7160, 1)
 ]
-
-DELTA = 4  # Weeks
 
 SCHEDULER_API_URL = 'https://ttp.cbp.dhs.gov/schedulerapi/locations/{location}/slots?startTimestamp={start}&endTimestamp={end}'
 TTP_TIME_FORMAT = '%Y-%m-%dT%H:%M'
@@ -34,9 +37,9 @@ def tweet(message):
         else:
             raise
 
-def check_for_openings(location_name, location_code, test_mode=True):
+def check_for_openings(location_name, location_code, weeks, test_mode=True):
     start = datetime.now()
-    end = start + timedelta(weeks=DELTA)
+    end = start + timedelta(weeks=weeks)
 
     url = SCHEDULER_API_URL.format(location=location_code,
                                    start=start.strftime(TTP_TIME_FORMAT),
@@ -76,8 +79,8 @@ def main():
                             stream=sys.stdout)
 
     logging.info('Starting checks (locations: {})'.format(len(LOCATIONS)))
-    for location_name, location_code in LOCATIONS:
-        check_for_openings(location_name, location_code, args.test)
+    for location_name, location_code, weeks in LOCATIONS:
+        check_for_openings(location_name, location_code, weeks, args.test)
 
 if __name__ == '__main__':
     main()
