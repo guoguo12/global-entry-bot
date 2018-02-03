@@ -14,9 +14,9 @@ LOGGING_FORMAT = '%(asctime)s %(name)-12s %(levelname)-8s %(message)s'
 # Location codes from https://ttp.cbp.dhs.gov/schedulerapi/locations/
 LOCATIONS = [
     ('MEM', 13621, 3),
-    ('LAX', 5180, 3),
-    ('SEA', 5420, 3),
     ('MLI', 11000, 3),
+    ('LAX', 5180, 2),
+    ('SEA', 5420, 2),
     ('BWI', 7940, 2),
     ('PHX', 7160, 1)
 ]
