@@ -49,6 +49,9 @@ def check_for_openings(location_name, location_code, weeks, test_mode=True):
     except requests.ConnectionError:
         logging.exception('Could not connect to scheduler API')
         sys.exit(1)
+    except ValueError:
+        logging.exception('Failed to parse JSON response')
+        sys.exit(1)
 
     for result in results:
         if result['active'] > 0:
