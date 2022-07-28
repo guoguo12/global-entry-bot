@@ -8,6 +8,8 @@ and [this comment](https://github.com/oliversong/goes-notifier/issues/5#issuecom
 
 This project is (obviously) not affiliated with U.S. Customs and Border Protection.
 
+Before you start, get your twitter API credentials by following this tutorial: https://developer.twitter.com/en/docs/twitter-api/getting-started/getting-access-to-the-twitter-api
+
 ## Installation
 
 Install dependencies with
