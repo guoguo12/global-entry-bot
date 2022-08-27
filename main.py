@@ -2,6 +2,7 @@ import argparse
 from datetime import datetime, timedelta
 import logging
 import sys
+from typing import NamedTuple
 
 import requests
 import twitter
@@ -10,11 +11,16 @@ from secrets import twitter_credentials
 
 LOGGING_FORMAT = '%(asctime)s %(name)-12s %(levelname)-8s %(message)s'
 
-# LAX is good for testing
-LOCATIONS = [
-    ('SFO', 5446),
-    # ('LAX', 5180)
-]
+
+class Location(NamedTuple):
+    name: str
+    code: int
+
+    @staticmethod
+    def parse(location_str):
+        name, code = location_str.split(",")
+        return Location(name, int(code))
+
 
 DELTA = 4  # Weeks
 
@@ -68,6 +74,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--test', '-t', action='store_true', default=False)
     parser.add_argument('--verbose', '-v', action='store_true', default=False)
+    parser.add_argument('locations', nargs='+', metavar='NAME,CODE', type=Location.parse,
+                        help="Locations to check, as a name and code (e.g. 'SFO,5446')")
     args = parser.parse_args()
 
     if args.verbose:
@@ -75,8 +83,8 @@ def main():
                             level=logging.INFO,
                             stream=sys.stdout)
 
-    logging.info('Starting checks (locations: {})'.format(len(LOCATIONS)))
-    for location_name, location_code in LOCATIONS:
+    logging.info('Starting checks (locations: {})'.format(len(args.locations)))
+    for location_name, location_code in args.locations:
         check_for_openings(location_name, location_code, args.test)
 
 if __name__ == '__main__':
