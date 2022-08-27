@@ -22,7 +22,7 @@ class Location(NamedTuple):
         return Location(name, int(code))
 
 
-DELTA = 4  # Weeks
+DELTA_WEEKS = 4
 
 SCHEDULER_API_URL = 'https://ttp.cbp.dhs.gov/schedulerapi/locations/{location}/slots?startTimestamp={start}&endTimestamp={end}'
 TTP_TIME_FORMAT = '%Y-%m-%dT%H:%M'
@@ -42,7 +42,7 @@ def tweet(message):
 
 def check_for_openings(location_name, location_code, test_mode=True):
     start = datetime.now()
-    end = start + timedelta(weeks=DELTA)
+    end = start + timedelta(weeks=DELTA_WEEKS)
 
     url = SCHEDULER_API_URL.format(location=location_code,
                                    start=start.strftime(TTP_TIME_FORMAT),
