@@ -1,13 +1,14 @@
 import argparse
+import configparser
 from datetime import datetime, timedelta
 import logging
+import os
 import sys
 from typing import NamedTuple
 
 import requests
 import twitter
 
-from secrets import twitter_credentials
 
 LOGGING_FORMAT = '%(asctime)s %(name)-12s %(levelname)-8s %(message)s'
 
@@ -29,14 +30,50 @@ class Location(NamedTuple):
         return Location(name, int(code))
 
 
+class TwitterApiCredentials(NamedTuple):
+    consumer_key: str
+    consumer_secret: str
+    access_token_key: str
+    access_token_secret: str
+
+    @staticmethod
+    def from_file(credentials_file):
+        with credentials_file:
+            credentials_config = configparser.ConfigParser()
+            credentials_config.read_file(credentials_file)
+
+            if 'twitter' not in credentials_config:
+                raise ValueError("Must provide credentials under 'twitter' heading")
+            twitter_api_config = credentials_config['twitter']
+            if set(twitter_api_config.keys()) != set(TwitterApiCredentials._fields):
+                raise ValueError(f"credentials defined with fields '{','.join(TwitterApiCredentials._fields)}'")
+            return TwitterApiCredentials(**twitter_api_config)
+
+    @staticmethod
+    def from_env():
+        env_variables = tuple(field.upper() for field in TwitterApiCredentials._fields)
+        if not all(v in os.environ for v in env_variables):
+            msg = f"Expected environment variables { ', '.join(env_variables) } to be set"
+            raise RuntimeError(msg)
+        credentials = {field: os.environ[field.upper()] for field in TwitterApiCredentials._fields}
+        return TwitterApiCredentials(**credentials)
+
+
 class AppointmentTweeter(object):
 
-    def __init__(self, test_mode, consumer_key, consumer_secret, access_token_key, access_token_secret):
-        self._test_mode = test_mode
-        self._api = twitter.Api(
-            consumer_key=consumer_key, consumer_secret=consumer_secret,
-            access_token_key=access_token_key, access_token_secret=access_token_secret
+    @staticmethod
+    def from_credentials(credentials, test_mode=True):
+        api = twitter.Api(
+            consumer_key=credentials.consumer_key,
+            consumer_secret=credentials.consumer_secret,
+            access_token_key=credentials.access_token_key,
+            access_token_secret=credentials.access_token_secret
         )
+        return AppointmentTweeter(api, test_mode)
+
+    def __init__(self, api, test_mode):
+        self._test_mode = test_mode
+        self._api = api
 
     def tweet(self, location_name, localized_time):
         timestamp = datetime.strptime(localized_time, TTP_TIME_FORMAT)
@@ -54,10 +91,10 @@ class AppointmentTweeter(object):
             if len(e.message) == 1 and e.message[0]['code'] == 187:
                 logging.info('Tweet rejected (duplicate status)')
             else:
+                logging.exception('Error when communicating with Twitter API: %s', e.message[0]['message'])
                 raise
 
-
-def check_for_openings(location_name, location_code, test_mode=True):
+def check_for_openings(location_name, location_code, appointment_tweeter):
     start = datetime.now()
     end = start + timedelta(weeks=DELTA_WEEKS)
 
@@ -70,8 +107,6 @@ def check_for_openings(location_name, location_code, test_mode=True):
         logging.exception('Could not connect to scheduler API')
         sys.exit(1)
 
-    appointment_tweeter = AppointmentTweeter(test_mode=test_mode, **twitter_credentials)
-
     for result in results:
         if result['active'] > 0:
             logging.info('Opening found for {}'.format(location_name))
@@ -82,10 +117,21 @@ def check_for_openings(location_name, location_code, test_mode=True):
     logging.info('No openings for {}'.format(location_name))
 
 
+def read_credentials(credentials_file):
+    if credentials_file:
+        logging.info('Loading twitter credentials from file')
+        return TwitterApiCredentials.from_file(credentials_file)
+    else:
+        logging.info('Loading twitter credentials from env')
+        return TwitterApiCredentials.from_env()
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--test', '-t', action='store_true', default=False)
     parser.add_argument('--verbose', '-v', action='store_true', default=False)
+    parser.add_argument('--credentials', '-c', type=argparse.FileType('r'),
+                        help='File with Twitter API credentials [default: use ENV variables]')
     parser.add_argument('locations', nargs='+', metavar='NAME,CODE', type=Location.parse,
                         help="Locations to check, as a name and code (e.g. 'SFO,5446')")
     args = parser.parse_args()
@@ -95,9 +141,12 @@ def main():
                             level=logging.INFO,
                             stream=sys.stdout)
 
+    credentials = read_credentials(args.credentials)
+    tweeter = AppointmentTweeter.from_credentials(credentials, args.test)
+
     logging.info('Starting checks (locations: {})'.format(len(args.locations)))
     for location_name, location_code in args.locations:
-        check_for_openings(location_name, location_code, args.test)
+        check_for_openings(location_name, location_code, tweeter)
 
 if __name__ == '__main__':
     main()

@@ -16,13 +16,18 @@ Install dependencies with
 pip install -r requirements.txt
 ```
 
-Then put your Twitter API credentials in a file called `secrets.py`, which should define `twitter_credentials`:
+You will need to supply your Twitter API credentials. You can do this in two ways. The first is with environment variables:
+```
+CONSUMER_KEY=consumer_key CONSUMER_SECRET=consumer_secret ACCESS_TOKEN_KEY=access_token_key ACCESS_TOKEN_SECRET=access_token_secret python main.py
+```
 
-```python
-twitter_credentials = dict(consumer_key='',
-                           consumer_secret='',
-                           access_token_key='',
-                           access_token_secret='')
+Or by providing a file with the credentials to the application using the `--credentials`/`-c` flag. The file is formatted in this way:
+```
+[twitter]
+consumer_key = consumer_key
+consumer_secret = consumer_secret
+access_token_key = access_token_key
+access_token_secret = access_token_secret
 ```
 
 To check for new appointment slots, run `main.py`. I suggest automating this using Cron.
