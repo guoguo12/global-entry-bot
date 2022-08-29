@@ -63,10 +63,13 @@ class Appointment:
     time: datetime
 
     @cached_property
+    def human_readable_time(self):
+        return self.time.strftime(MESSAGE_TIME_FORMAT)
+
+    @cached_property
     def message(self):
-        human_readable_appointment = self.time.strftime(MESSAGE_TIME_FORMAT)
         return NOTIF_MESSAGE.format(location=self.location.name,
-                                    date=human_readable_appointment)
+                                    date=self.human_readable_time)
 
 
 @dataclass(frozen=True)
@@ -149,11 +152,14 @@ def get_appointments(location):
         logging.exception('Could not connect to scheduler API')
         raise
 
-    for result in results:
-        if result['active'] > 0:
-            logging.info('Appointment found for {}'.format(location.name))
-            appointment_time = datetime.strptime(result['timestamp'], TTP_TIME_FORMAT).replace(tzinfo=location.timezone)
-            yield Appointment(location, appointment_time)
+    active_slots = [result for result in results if result.get('active', 0) > 0]
+    logging.info('Found %s appointments at %s', len(active_slots), location.name)
+
+    for result in active_slots:
+        appointment_time = datetime.strptime(result['timestamp'], TTP_TIME_FORMAT).replace(tzinfo=location.timezone)
+        appointment = Appointment(location, appointment_time)
+        logging.info('Appointment found in %s at %s', location.name, appointment.human_readable_time)
+        yield appointment
 
 
 def read_credentials(credentials_file):
