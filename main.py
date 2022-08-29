@@ -1,10 +1,14 @@
 import argparse
 import configparser
-from datetime import datetime, timedelta
+from dataclasses import dataclass, fields
+from datetime import datetime, timedelta, timezone
+from functools import cache, cached_property
+import itertools
 import logging
 import os
+from signal import raise_signal
 import sys
-from typing import NamedTuple
+from zoneinfo import ZoneInfo
 
 import requests
 import twitter
@@ -12,15 +16,33 @@ import twitter
 
 LOGGING_FORMAT = '%(asctime)s %(name)-12s %(levelname)-8s %(message)s'
 
-DELTA_WEEKS = 4
+START_TIME_UTC = datetime.now(timezone.utc)
+END_TIME_UTC = START_TIME_UTC + timedelta(weeks=12)
 
+LOCATION_DETAIL_URL = 'https://ttp.cbp.dhs.gov/schedulerapi/locations/'
 SCHEDULER_API_URL = 'https://ttp.cbp.dhs.gov/schedulerapi/locations/{location}/slots?startTimestamp={start}&endTimestamp={end}'
 TTP_TIME_FORMAT = '%Y-%m-%dT%H:%M'
 
 NOTIF_MESSAGE = 'New appointment slot open at {location}: {date}'
 MESSAGE_TIME_FORMAT = '%A, %B %d, %Y at %I:%M %p'
 
-class Location(NamedTuple):
+
+@cache
+def _location_details():
+    try:
+        results = requests.get(LOCATION_DETAIL_URL).json()
+    except requests.ConnectionError:
+        logging.exception('Could not connect to location details endpoint')
+        raise_signal
+    return {
+        location_detail['id']: location_detail
+        for location_detail in results
+        if 'id 'in location_detail
+    }
+
+
+@dataclass(frozen=True)
+class Location:
     name: str
     code: int
 
@@ -29,8 +51,26 @@ class Location(NamedTuple):
         name, code = location_str.split(",")
         return Location(name, int(code))
 
+    @cached_property
+    def timezone(self):
+        tz_string = _location_details().get('tzData', 'UTC')
+        return ZoneInfo(tz_string)
 
-class TwitterApiCredentials(NamedTuple):
+
+@dataclass(frozen=True)
+class Appointment:
+    location: Location
+    time: datetime
+
+    @cached_property
+    def message(self):
+        human_readable_appointment = self.time.strftime(MESSAGE_TIME_FORMAT)
+        return NOTIF_MESSAGE.format(location=self.location.name,
+                                    date=human_readable_appointment)
+
+
+@dataclass(frozen=True)
+class TwitterApiCredentials:
     consumer_key: str
     consumer_secret: str
     access_token_key: str
@@ -45,18 +85,22 @@ class TwitterApiCredentials(NamedTuple):
             if 'twitter' not in credentials_config:
                 raise ValueError("Must provide credentials under 'twitter' heading")
             twitter_api_config = credentials_config['twitter']
-            if set(twitter_api_config.keys()) != set(TwitterApiCredentials._fields):
-                raise ValueError(f"credentials defined with fields '{','.join(TwitterApiCredentials._fields)}'")
+            if set(twitter_api_config.keys()) != set(TwitterApiCredentials.fields()):
+                raise ValueError(f"credentials defined with fields '{','.join(TwitterApiCredentials.fields())}'")
             return TwitterApiCredentials(**twitter_api_config)
 
     @staticmethod
     def from_env():
-        env_variables = tuple(field.upper() for field in TwitterApiCredentials._fields)
+        env_variables = tuple(field.upper() for field in TwitterApiCredentials.fields())
         if not all(v in os.environ for v in env_variables):
             msg = f"Expected environment variables { ', '.join(env_variables) } to be set"
             raise RuntimeError(msg)
-        credentials = {field: os.environ[field.upper()] for field in TwitterApiCredentials._fields}
+        credentials = {field: os.environ[field.upper()] for field in TwitterApiCredentials.fields()}
         return TwitterApiCredentials(**credentials)
+
+    @staticmethod
+    def fields():
+        return [field.name for field in fields(TwitterApiCredentials)]
 
 
 class AppointmentTweeter(object):
@@ -75,13 +119,10 @@ class AppointmentTweeter(object):
         self._test_mode = test_mode
         self._api = api
 
-    def tweet(self, location_name, localized_time):
-        timestamp = datetime.strptime(localized_time, TTP_TIME_FORMAT)
-        message = NOTIF_MESSAGE.format(location=location_name,
-                                        date=timestamp.strftime(MESSAGE_TIME_FORMAT))
-        logging.info('Message: ' + message)
+    def tweet(self, appointment):
+        logging.info('Message: ' + appointment.message)
         if not self._test_mode:
-            self._tweet(message)
+            self._tweet(appointment.message)
 
     def _tweet(self, message):
         logging.info('Tweeting: ' + message)
@@ -94,27 +135,25 @@ class AppointmentTweeter(object):
                 logging.exception('Error when communicating with Twitter API: %s', e.message[0]['message'])
                 raise
 
-def check_for_openings(location_name, location_code, appointment_tweeter):
-    start = datetime.now()
-    end = start + timedelta(weeks=DELTA_WEEKS)
 
-    url = SCHEDULER_API_URL.format(location=location_code,
+def get_appointments(location):
+    start = START_TIME_UTC.astimezone(location.timezone)
+    end = END_TIME_UTC.astimezone(location.timezone)
+
+    url = SCHEDULER_API_URL.format(location=location.code,
                                    start=start.strftime(TTP_TIME_FORMAT),
                                    end=end.strftime(TTP_TIME_FORMAT))
     try:
         results = requests.get(url).json()  # List of flat appointment objects
     except requests.ConnectionError:
         logging.exception('Could not connect to scheduler API')
-        sys.exit(1)
+        raise
 
     for result in results:
         if result['active'] > 0:
-            logging.info('Opening found for {}'.format(location_name))
-
-            appointment_tweeter.tweet(location_name, result['timestamp'])
-            return  # Halt on first match
-
-    logging.info('No openings for {}'.format(location_name))
+            logging.info('Appointment found for {}'.format(location.name))
+            appointment_time = datetime.strptime(result['timestamp'], TTP_TIME_FORMAT).replace(tzinfo=location.timezone)
+            yield Appointment(location, appointment_time)
 
 
 def read_credentials(credentials_file):
@@ -145,8 +184,12 @@ def main():
     tweeter = AppointmentTweeter.from_credentials(credentials, args.test)
 
     logging.info('Starting checks (locations: {})'.format(len(args.locations)))
-    for location_name, location_code in args.locations:
-        check_for_openings(location_name, location_code, tweeter)
+    appointments = itertools.chain.from_iterable(
+        get_appointments(location) for location in args.locations
+    )
+    for appointment in appointments:
+        tweeter.tweet(appointment)
+
 
 if __name__ == '__main__':
     main()
