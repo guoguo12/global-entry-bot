@@ -6,7 +6,6 @@ from functools import cache, cached_property
 import itertools
 import logging
 import os
-from signal import raise_signal
 import sys
 from zoneinfo import ZoneInfo
 
@@ -33,7 +32,7 @@ def _location_details():
         results = requests.get(LOCATION_DETAIL_URL).json()
     except requests.ConnectionError:
         logging.exception('Could not connect to location details endpoint')
-        raise_signal
+        raise
     return {
         location_detail['id']: location_detail
         for location_detail in results
