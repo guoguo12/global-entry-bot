@@ -181,7 +181,7 @@ def read_credentials(credentials_file):
 def write_locations(args):
     logging.info('Writing locations')
     for location_details in _location_details().values():
-        print(f"{location_details.get('name', '')}\t{location_details.get('id', '')}")
+        print(f"{location_details.get('id', '')}\t{location_details.get('name', '')}")
 
 
 def _all_appointments(args):
