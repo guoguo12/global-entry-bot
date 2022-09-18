@@ -39,6 +39,8 @@ def _location_details():
         for location_detail in results
         if 'id' in location_detail
         and location_detail.get('operational')
+        and not location_detail.get('temporary')
+        and not location_detail.get('inviteOnly')
     }
 
 
