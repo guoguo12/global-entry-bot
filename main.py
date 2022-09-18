@@ -171,7 +171,7 @@ def read_credentials(credentials_file):
         return TwitterApiCredentials.from_env()
 
 
-def main():
+def parse_args(args):
     parser = argparse.ArgumentParser()
     parser.add_argument('--test', '-t', action='store_true', default=False)
     parser.add_argument('--verbose', '-v', action='store_true', default=False)
@@ -179,7 +179,11 @@ def main():
                         help='File with Twitter API credentials [default: use ENV variables]')
     parser.add_argument('locations', nargs='+', metavar='NAME,CODE', type=Location.parse,
                         help="Locations to check, as a name and code (e.g. 'SFO,5446')")
-    args = parser.parse_args()
+    return parser.parse_args(args)
+
+
+def main(raw_args):
+    args = parse_args(raw_args)
 
     if args.verbose:
         logging.basicConfig(format=LOGGING_FORMAT,
@@ -198,4 +202,4 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    main(sys.argv[1:])
