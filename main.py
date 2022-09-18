@@ -184,7 +184,7 @@ def main():
     if args.verbose:
         logging.basicConfig(format=LOGGING_FORMAT,
                             level=logging.INFO,
-                            stream=sys.stdout)
+                            stream=sys.stderr)
 
     credentials = read_credentials(args.credentials)
     tweeter = AppointmentTweeter.from_credentials(credentials, args.test)
