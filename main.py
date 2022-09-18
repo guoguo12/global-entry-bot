@@ -65,11 +65,6 @@ class Appointment:
     def human_readable_time(self):
         return self.time.strftime(MESSAGE_TIME_FORMAT)
 
-    @cached_property
-    def message(self):
-        return NOTIF_MESSAGE.format(location=self.location.name,
-                                    date=self.human_readable_time)
-
 
 @dataclass(frozen=True)
 class TwitterApiCredentials:
@@ -121,10 +116,16 @@ class AppointmentTweeter(object):
         self._test_mode = test_mode
         self._api = api
 
+    @staticmethod
+    def _compose_message(appointment):
+        return NOTIF_MESSAGE.format(location=appointment.location.name,
+                                    date=appointment.human_readable_time)
+
     def tweet(self, appointment):
-        logging.info('Message: ' + appointment.message)
+        message = self._compose_message(appointment)
+        logging.info('Message: ' + message)
         if not self._test_mode:
-            self._tweet(appointment.message)
+            self._tweet(message)
 
     def _tweet(self, message):
         logging.info('Tweeting: ' + message)
