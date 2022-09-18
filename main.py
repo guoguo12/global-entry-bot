@@ -55,6 +55,9 @@ class Location:
         tz_string = _location_details().get('tzData', 'UTC')
         return ZoneInfo(tz_string)
 
+    def __str__(self):
+        return f'{self.name} ({self.code})'
+
 
 @dataclass(frozen=True)
 class Appointment:
@@ -171,14 +174,44 @@ def read_credentials(credentials_file):
         return TwitterApiCredentials.from_env()
 
 
+def _all_appointments(args):
+    logging.info('Starting checks (locations: {})'.format(len(args.locations)))
+    return itertools.chain.from_iterable(
+        get_appointments(location) for location in args.locations
+    )
+
+
+def write_appointments(args):
+    for appointment in _all_appointments(args):
+        print(f'{appointment.location}\t{appointment.human_readable_time}')
+
+
+def tweet_appointments(args):
+    credentials = read_credentials(args.credentials)
+    tweeter = AppointmentTweeter.from_credentials(credentials, args.test)
+    for appointment in _all_appointments(args):
+        tweeter.tweet(appointment)
+
 def parse_args(args):
     parser = argparse.ArgumentParser()
-    parser.add_argument('--test', '-t', action='store_true', default=False)
-    parser.add_argument('--verbose', '-v', action='store_true', default=False)
-    parser.add_argument('--credentials', '-c', type=argparse.FileType('r'),
-                        help='File with Twitter API credentials [default: use ENV variables]')
-    parser.add_argument('locations', nargs='+', metavar='NAME,CODE', type=Location.parse,
-                        help="Locations to check, as a name and code (e.g. 'SFO,5446')")
+    parser.add_argument('--verbose', '-v', action='store_true', default=False, help='Use verbose logging')
+
+    subparsers = parser.add_subparsers(title='subcommands', description='valid subcommands',
+                                       help='possible subcommands')
+
+    get_appointments_parser = subparsers.add_parser('appointments', help='Get available appointments')
+    get_appointments_parser.set_defaults(func=write_appointments)
+
+    tweet_appointments_parser = subparsers.add_parser('tweet', help='Tweet available appointments')
+    tweet_appointments_parser.add_argument('--test', '-t', action='store_true', default=False)
+    tweet_appointments_parser.add_argument('--credentials', '-c', type=argparse.FileType('r'),
+                                           help='File with Twitter API credentials [default: use ENV variables]')
+    tweet_appointments_parser.set_defaults(func=tweet_appointments)
+
+    for takes_location_subparser in (get_appointments_parser, tweet_appointments_parser):
+        takes_location_subparser.add_argument('locations', nargs='+', metavar='NAME,CODE', type=Location.parse,
+                                              help="Locations to check, as a name and code (e.g. 'SFO,5446')")
+
     return parser.parse_args(args)
 
 
@@ -190,15 +223,7 @@ def main(raw_args):
                             level=logging.INFO,
                             stream=sys.stderr)
 
-    credentials = read_credentials(args.credentials)
-    tweeter = AppointmentTweeter.from_credentials(credentials, args.test)
-
-    logging.info('Starting checks (locations: {})'.format(len(args.locations)))
-    appointments = itertools.chain.from_iterable(
-        get_appointments(location) for location in args.locations
-    )
-    for appointment in appointments:
-        tweeter.tweet(appointment)
+    args.func(args)
 
 
 if __name__ == '__main__':
