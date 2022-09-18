@@ -33,10 +33,12 @@ def _location_details():
     except requests.ConnectionError:
         logging.exception('Could not connect to location details endpoint')
         raise
+    logging.info('Got details for %s locations', len(results))
     return {
         location_detail['id']: location_detail
         for location_detail in results
-        if 'id 'in location_detail
+        if 'id' in location_detail
+        and location_detail.get('operational')
     }
 
 
@@ -174,6 +176,12 @@ def read_credentials(credentials_file):
         return TwitterApiCredentials.from_env()
 
 
+def write_locations(args):
+    logging.info('Writing locations')
+    for location_details in _location_details().values():
+        print(f"{location_details.get('name', '')}\t{location_details.get('id', '')}")
+
+
 def _all_appointments(args):
     logging.info('Starting checks (locations: {})'.format(len(args.locations)))
     return itertools.chain.from_iterable(
@@ -182,11 +190,13 @@ def _all_appointments(args):
 
 
 def write_appointments(args):
+    logging.info('Writing appointments')
     for appointment in _all_appointments(args):
         print(f'{appointment.location}\t{appointment.human_readable_time}')
 
 
 def tweet_appointments(args):
+    logging.info('Tweeting appointments')
     credentials = read_credentials(args.credentials)
     tweeter = AppointmentTweeter.from_credentials(credentials, args.test)
     for appointment in _all_appointments(args):
@@ -198,6 +208,9 @@ def parse_args(args):
 
     subparsers = parser.add_subparsers(title='subcommands', description='valid subcommands',
                                        help='possible subcommands')
+
+    locations_parser = subparsers.add_parser('locations', help='Get interview locations')
+    locations_parser.set_defaults(func=write_locations)
 
     get_appointments_parser = subparsers.add_parser('appointments', help='Get available appointments')
     get_appointments_parser.set_defaults(func=write_appointments)
